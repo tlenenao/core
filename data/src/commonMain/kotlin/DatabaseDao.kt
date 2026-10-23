@@ -14,6 +14,9 @@ import com.maxrave.domain.data.entities.AutoEqCurveEntity
 import com.maxrave.domain.data.entities.AutoEqEntryEntity
 import com.maxrave.domain.data.entities.AutoEqIndexMetaEntity
 import com.maxrave.domain.data.entities.EpisodeEntity
+import com.maxrave.domain.data.entities.genre.GenreLookupEntity
+import com.maxrave.domain.data.entities.genre.GenrePlaylistEntity
+import com.maxrave.domain.data.entities.genre.SongGenreTagEntity
 import com.maxrave.domain.data.entities.FollowedArtistSingleAndAlbum
 import com.maxrave.domain.data.entities.GoogleAccountEntity
 import com.maxrave.domain.data.entities.LocalPlaylistEntity
@@ -991,6 +994,93 @@ interface DatabaseDao {
         playlistId: Long,
         videoId: String,
     )
+
+    // Genres (automatic genre playlists)
+    @Query("SELECT * FROM genre_lookup WHERE videoId = :videoId")
+    suspend fun getGenreLookup(videoId: String): GenreLookupEntity?
+
+    @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
+    suspend fun upsertGenreLookup(lookup: GenreLookupEntity)
+
+    @Query("SELECT * FROM song_genre_tag WHERE videoId = :videoId")
+    suspend fun getGenreTags(videoId: String): List<SongGenreTagEntity>
+
+    @Query("DELETE FROM song_genre_tag WHERE videoId = :videoId AND source = :source")
+    suspend fun deleteGenreTags(
+        videoId: String,
+        source: String,
+    )
+
+    @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
+    suspend fun insertGenreTags(tags: List<SongGenreTagEntity>)
+
+    /** Swaps one provider's tags for a song in one transaction, so a reader never sees half of them. */
+    @Transaction
+    suspend fun replaceGenreTags(
+        videoId: String,
+        source: String,
+        tags: List<SongGenreTagEntity>,
+    ) {
+        deleteGenreTags(videoId, source)
+        insertGenreTags(tags)
+    }
+
+    @Query("SELECT videoId FROM genre_lookup WHERE finished = 0 AND nextAttemptAt <= :now ORDER BY nextAttemptAt LIMIT 1")
+    suspend fun nextDueGenreLookup(now: Long): String?
+
+    @Query("SELECT MIN(nextAttemptAt) FROM genre_lookup WHERE finished = 0")
+    suspend fun earliestPendingGenreLookup(): Long?
+
+    /** Only songs that stopped because a provider kept failing: a settled "no result" stays settled. */
+    @Query(
+        "UPDATE genre_lookup SET finished = 0, attempts = 0, nextAttemptAt = 0 " +
+            "WHERE finished = 1 AND (lastfmState = 3 OR musicbrainzState = 3) AND updatedAt < :olderThan",
+    )
+    suspend fun reopenGaveUpGenreLookups(olderThan: Long): Int
+
+    @Query("SELECT playlistId FROM genre_playlist WHERE genreKey = :genreKey")
+    suspend fun getGenrePlaylistId(genreKey: String): Long?
+
+    @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
+    suspend fun insertGenrePlaylist(genrePlaylist: GenrePlaylistEntity)
+
+    @Query("SELECT COUNT(*) FROM pair_song_local_playlist WHERE playlistId = :playlistId AND songId = :videoId")
+    suspend fun countPlaylistPair(
+        playlistId: Long,
+        videoId: String,
+    ): Int
+
+    /**
+     * Puts [videoId] in the automatic playlist of [genreKey], creating the playlist first when the
+     * genre has none. Creation, mapping and insertion share one transaction, so a crash cannot leave
+     * an empty orphan playlist or a mapping without a playlist.
+     *
+     * The song is written the way the app's own "add to playlist" does it: a pair row at the end
+     * and the denormalised `tracks` list kept in step. A song already in the playlist is left alone.
+     * Requires a `song` row for [videoId] (foreign key).
+     *
+     * @return true when the song was newly added.
+     */
+    @Transaction
+    suspend fun addSongToGenrePlaylist(
+        genreKey: String,
+        title: String,
+        videoId: String,
+    ): Boolean {
+        var playlistId = getGenrePlaylistId(genreKey)
+        if (playlistId == null || getLocalPlaylist(playlistId) == null) {
+            playlistId = insertLocalPlaylist(LocalPlaylistEntity(title = title))
+            if (playlistId == -1L) return false
+            insertGenrePlaylist(GenrePlaylistEntity(genreKey, playlistId))
+        }
+        if (countPlaylistPair(playlistId, videoId) > 0) return false
+        val tracks = getLocalPlaylist(playlistId)?.tracks.orEmpty()
+        insertPairSongLocalPlaylist(
+            PairSongLocalPlaylist(playlistId = playlistId, songId = videoId, position = tracks.size, inPlaylist = now()),
+        )
+        updateLocalPlaylistTracks(tracks + videoId, playlistId)
+        return true
+    }
 
     // GoogleAccountEntity
     @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)

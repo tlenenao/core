@@ -2,6 +2,12 @@ package com.maxrave.data.di
 
 import com.maxrave.common.AppIdentity
 import com.maxrave.common.Config.SERVICE_SCOPE
+import com.maxrave.data.genre.GenreEnrichmentQueue
+import com.maxrave.data.genre.GenreRepositoryImpl
+import com.maxrave.data.genre.KtorGenreHttpGet
+import com.maxrave.data.genre.LastfmGenreProvider
+import com.maxrave.data.genre.MusicBrainzGenreProvider
+import com.maxrave.data.genre.nowMillis
 import com.maxrave.data.io.fileDir
 import com.maxrave.data.repository.AccountRepositoryImpl
 import com.maxrave.data.repository.AlbumRepositoryImpl
@@ -30,6 +36,13 @@ import com.maxrave.domain.repository.LyricsRomanizerRepository
 import com.maxrave.domain.repository.CommonRepository
 import com.maxrave.domain.repository.HomeRepository
 import com.maxrave.domain.repository.ImportRepository
+import com.maxrave.domain.genre.GenreEnrichment
+import com.maxrave.domain.genre.GenreSettings
+import com.maxrave.domain.manager.DataStoreManager
+import kotlinx.coroutines.flow.first
+import org.simpmusic.lastfm.configLastfmTagKey
+import org.simpmusic.lastfm.fetchTrackTags
+import com.maxrave.domain.repository.GenreRepository
 import com.maxrave.domain.repository.LocalPlaylistRepository
 import com.maxrave.domain.repository.LyricsCanvasRepository
 import com.maxrave.domain.repository.PlaylistRepository
@@ -103,6 +116,35 @@ val repositoryModule =
 
         single<SearchRepository>(createdAtStart = true) {
             SearchRepositoryImpl(get(), get())
+        }
+
+        single<GenreRepository> {
+            GenreRepositoryImpl(get())
+        }
+
+        // Created at start only so that favourites left unfinished by the last session resume;
+        // `resume()` waits before doing any work.
+        single(createdAtStart = true) {
+            GenreEnrichmentQueue(
+                GenreEnrichment(
+                    providers =
+                        listOf(
+                            LastfmGenreProvider(
+                                lookup = { artist, track ->
+                                    // Read per lookup: one per like, and no collector to leak.
+                                    configLastfmTagKey(
+                                        get<DataStoreManager>().getString(GenreSettings.LASTFM_KEY).first().orEmpty(),
+                                    )
+                                    fetchTrackTags(artist, track)
+                                },
+                            ),
+                            MusicBrainzGenreProvider(KtorGenreHttpGet()),
+                        ),
+                    repository = get(),
+                    now = ::nowMillis,
+                    random = kotlin.random.Random.Default::nextDouble,
+                ),
+            ).also { it.resume() }
         }
 
         single<SongRepository>(createdAtStart = true) {

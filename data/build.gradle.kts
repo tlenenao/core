@@ -78,6 +78,8 @@ kotlin {
                 implementation(projects.kotlinYtmusicScraper)
                 implementation(projects.kizzy)
                 implementation(projects.listenTogether)
+                implementation(projects.ktorExt)
+                implementation(libs.ktor.client.core)
 
                 // Last.fm (gated: real scrobbler for full builds, no-op stub for FOSS builds)
                 if (isFullBuild) {
@@ -107,6 +109,7 @@ kotlin {
         commonTest {
             dependencies {
                 implementation(libs.kotlin.test)
+                implementation(libs.coroutines.test)
             }
         }
 

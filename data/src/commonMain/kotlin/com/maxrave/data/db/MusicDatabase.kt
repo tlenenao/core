@@ -31,6 +31,9 @@ import com.maxrave.domain.data.entities.SongInfoEntity
 import com.maxrave.domain.data.entities.TranslatedLyricsEntity
 import com.maxrave.domain.data.entities.YourYouTubePlaylistList
 import com.maxrave.domain.data.entities.analytics.EventArtistEntity
+import com.maxrave.domain.data.entities.genre.GenreLookupEntity
+import com.maxrave.domain.data.entities.genre.GenrePlaylistEntity
+import com.maxrave.domain.data.entities.genre.SongGenreTagEntity
 import com.maxrave.domain.data.entities.analytics.PlaybackEventEntity
 
 @Database(
@@ -41,9 +44,10 @@ import com.maxrave.domain.data.entities.analytics.PlaybackEventEntity
         NotificationEntity::class, TranslatedLyricsEntity::class, PodcastsEntity::class, EpisodeEntity::class,
         YourYouTubePlaylistList::class, PlaybackEventEntity::class, EventArtistEntity::class,
         AutoEqEntryEntity::class, AutoEqIndexMetaEntity::class, AutoEqCurveEntity::class,
-        ArtistMotionEntity::class
+        ArtistMotionEntity::class,
+        SongGenreTagEntity::class, GenreLookupEntity::class, GenrePlaylistEntity::class,
     ],
-    version = 27,
+    version = 28,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 2, to = 3), AutoMigration(
@@ -98,6 +102,12 @@ import com.maxrave.domain.data.entities.analytics.PlaybackEventEntity
         AutoMigration(26, 27),
         AutoMigration(25, 27),
         AutoMigration(24, 27),
+        // 28 adds the automatic genre playlists: song_genre_tag, genre_lookup, genre_playlist.
+        // Three new tables and nothing else, so Room generates the migration itself — no spec, and
+        // no path by which an existing row can be touched.
+        AutoMigration(27, 28),
+        AutoMigration(26, 28),
+        AutoMigration(25, 28),
     ],
 )
 @TypeConverters(Converters::class)

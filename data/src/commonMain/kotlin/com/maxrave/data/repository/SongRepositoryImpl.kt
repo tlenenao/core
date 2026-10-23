@@ -3,6 +3,7 @@ package com.maxrave.data.repository
 import com.maxrave.common.MERGING_DATA_TYPE
 import com.maxrave.data.db.datasource.LocalDataSource
 import com.maxrave.data.extension.getFullDataFromDB
+import com.maxrave.data.genre.GenreEnrichmentQueue
 import com.maxrave.data.mapping.toListTrack
 import com.maxrave.data.mapping.toYouTubeComment
 import com.maxrave.data.mapping.toYouTubeCommentsPage
@@ -328,6 +329,7 @@ internal class SongRepositoryImpl(
      * already depends on this repository (it calls [recoverQueue] whenever it saves the queue).
      */
     private val mediaPlayerHandler: MediaPlayerHandler by lazy { getKoin().get() }
+    private val genreQueue: GenreEnrichmentQueue by lazy { getKoin().get() }
 
     /**
      * Note the side effect: liking a song can start a download, when the user has asked for that.
@@ -340,7 +342,13 @@ internal class SongRepositoryImpl(
         videoId: String,
         likeStatus: Int,
     ) = withContext(Dispatchers.Main) {
+        // Read before the write: only a song going from not-liked to liked starts the genre lookup,
+        // so tapping the heart on something already liked costs nothing.
+        val becameLiked = likeStatus == 1 && localDataSource.getSong(videoId)?.liked == false
         localDataSource.updateLiked(likeStatus, videoId)
+        // Fire and forget: the queue returns at once and never throws, so a slow or failing network
+        // can not delay the like.
+        if (becameLiked) genreQueue.onSongLiked(videoId)
         if (likeStatus == 1 && dataStoreManager.autoDownloadLikedSongs.first() == TRUE) {
             val song = localDataSource.getSong(videoId)
             if (song != null && song.downloadState != DownloadState.STATE_DOWNLOADED) {
