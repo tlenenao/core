@@ -1,5 +1,6 @@
 package com.maxrave.data.di
 
+import DatabaseDao
 import com.maxrave.common.AppIdentity
 import com.maxrave.common.Config.SERVICE_SCOPE
 import com.maxrave.data.genre.GenreEnrichmentQueue
@@ -37,6 +38,7 @@ import com.maxrave.domain.repository.CommonRepository
 import com.maxrave.domain.repository.HomeRepository
 import com.maxrave.domain.repository.ImportRepository
 import com.maxrave.domain.genre.GenreEnrichment
+import com.maxrave.domain.genre.GenreReingest
 import com.maxrave.domain.genre.GenreSettings
 import com.maxrave.domain.manager.DataStoreManager
 import kotlinx.coroutines.flow.first
@@ -126,7 +128,7 @@ val repositoryModule =
         // `resume()` waits before doing any work.
         single(createdAtStart = true) {
             GenreEnrichmentQueue(
-                GenreEnrichment(
+                enrichment = GenreEnrichment(
                     providers =
                         listOf(
                             LastfmGenreProvider(
@@ -144,8 +146,11 @@ val repositoryModule =
                     now = ::nowMillis,
                     random = kotlin.random.Random.Default::nextDouble,
                 ),
+                likedSongIds = { get<DatabaseDao>().getLikedSongIds() },
             ).also { it.resume() }
         }
+
+        single<GenreReingest> { get<GenreEnrichmentQueue>() }
 
         single<SongRepository>(createdAtStart = true) {
             SongRepositoryImpl(get(), get(), get())

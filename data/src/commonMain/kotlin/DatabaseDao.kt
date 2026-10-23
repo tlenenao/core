@@ -996,6 +996,9 @@ interface DatabaseDao {
     )
 
     // Genres (automatic genre playlists)
+    @Query("SELECT videoId FROM song WHERE liked = 1")
+    suspend fun getLikedSongIds(): List<String>
+
     @Query("SELECT * FROM genre_lookup WHERE videoId = :videoId")
     suspend fun getGenreLookup(videoId: String): GenreLookupEntity?
 

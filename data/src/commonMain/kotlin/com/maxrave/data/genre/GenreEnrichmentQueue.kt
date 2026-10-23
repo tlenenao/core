@@ -1,6 +1,7 @@
 package com.maxrave.data.genre
 
 import com.maxrave.domain.genre.GenreEnrichment
+import com.maxrave.domain.genre.GenreReingest
 import com.maxrave.logger.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -30,13 +31,30 @@ private const val TAG = "GenreQueue"
 @OptIn(ExperimentalTime::class)
 internal class GenreEnrichmentQueue(
     private val enrichment: GenreEnrichment,
+    private val likedSongIds: suspend () -> List<String> = { emptyList() },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-) {
+) : GenreReingest {
     private val lock = Mutex()
 
     /** Songs favourited this session that must be (re)filed even if already finished. */
     private val requested = ArrayDeque<String>()
     private var drain: Job? = null
+
+    /** Songs whose providers must all be asked again, whatever they answered before. */
+    private val forced = HashSet<String>()
+
+    /** The Settings button: every liked song is filed again, with fresh answers from the providers. */
+    override suspend fun reingestLikedSongs(): Int {
+        val ids = likedSongIds()
+        lock.withLock {
+            for (id in ids) {
+                forced += id
+                if (id !in requested) requested.addLast(id)
+            }
+        }
+        if (ids.isNotEmpty()) ensureDraining()
+        return ids.size
+    }
 
     fun onSongLiked(videoId: String) {
         scope.launch {
@@ -97,7 +115,7 @@ internal class GenreEnrichmentQueue(
             }
             try {
                 Logger.d(TAG, "Processing genres for $videoId")
-                enrichment.process(videoId)
+                enrichment.process(videoId, force = lock.withLock { forced.remove(videoId) })
             } catch (e: CancellationException) {
                 lock.withLock { drain = null }
                 throw e
