@@ -3,6 +3,7 @@ package com.maxrave.domain.genre
 import com.maxrave.domain.data.entities.genre.GenreLookupEntity
 import com.maxrave.domain.data.entities.genre.GenreLookupEntity.ProviderState
 import com.maxrave.domain.repository.GenreRepository
+import com.maxrave.logger.Logger
 
 /**
  * Finds the genres of one favourite song and files it into the matching automatic playlists.
@@ -46,6 +47,8 @@ class GenreEnrichment(
         force: Boolean = false,
     ): Outcome {
         val query = repository.getTrackQuery(videoId) ?: return Outcome.UnknownSong
+        // Every liked song goes in the "Liked" playlist, whatever the providers find.
+        repository.addToGenrePlaylists(videoId, listOf(LIKED), { LIKED_TITLE })
         var lookup = repository.getLookup(videoId)?.takeUnless { force } ?: GenreLookupEntity(videoId)
 
         var failure = false
@@ -73,9 +76,11 @@ class GenreEnrichment(
                     }
                 }
             lookup = lookup.withState(provider.source, state)
+            Logger.i(TAG, "$videoId ${provider.source}: ${result::class.simpleName} -> state $state")
         }
 
         val genres = GenreMerger.merge(repository.getTags(videoId).map { it.toNormalized() })
+        Logger.i(TAG, "$videoId \"${query.title}\" / ${query.artist}: ${genres.map { it.label }}")
         if (genres.isNotEmpty()) repository.addToGenrePlaylists(videoId, genres, playlistTitle)
 
         return if (!failure) {
@@ -108,6 +113,12 @@ class GenreEnrichment(
             repository.saveLookup(lookup.copy(attempts = attempts, finished = false, nextAttemptAt = next, updatedAt = time))
             Outcome.Retry(genres, next)
         }
+    }
+
+    private companion object {
+        const val TAG = "GenreEnrichment"
+        const val LIKED_TITLE = "Liked"
+        val LIKED = MergedGenre(key = "__liked__", label = LIKED_TITLE, score = 1.0, sources = emptySet())
     }
 
     /** Registers a newly favourited song so that it survives a restart. Never overwrites progress. */

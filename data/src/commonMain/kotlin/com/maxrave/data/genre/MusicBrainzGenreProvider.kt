@@ -101,7 +101,10 @@ internal class MusicBrainzGenreProvider(
                         val recTitle = rec["title"]?.jsonPrimitive?.content.orEmpty()
                         score >= MIN_SCORE &&
                             TrackTextCleaner.comparable(recTitle) == wantedTitle &&
-                            creditedArtists(rec).any { artistMatches(it, artist) }
+                            creditedArtists(rec).any { artistMatches(it, artist) } &&
+                            // The same track appears once per release and most copies carry no tags:
+                            // take the MAX_MATCHES that have some, not the first ones.
+                            (namedCounts(rec["genres"]) + namedCounts(rec["tags"])).isNotEmpty()
                     }.take(MAX_MATCHES)
             if (matches.isEmpty()) return ProviderResult.NoMatch
 

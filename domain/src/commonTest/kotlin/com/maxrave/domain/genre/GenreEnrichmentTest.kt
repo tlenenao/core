@@ -16,6 +16,7 @@ private class FakeRepo(
     val lookups = mutableMapOf<String, GenreLookupEntity>()
     val tags = mutableMapOf<Triple<String, String, String>, SongGenreTagEntity>()
     val playlists = mutableMapOf<String, MutableSet<String>>() // genreKey -> videoIds
+    val liked = mutableSetOf<String>() // the "Liked" playlist, kept apart from the genre ones
 
     override suspend fun getTrackQuery(videoId: String) = songs[videoId]
 
@@ -41,7 +42,10 @@ private class FakeRepo(
         videoId: String,
         genres: List<MergedGenre>,
         playlistTitle: (String) -> String,
-    ): Int = genres.count { playlists.getOrPut(it.key) { mutableSetOf() }.add(videoId) }
+    ): Int =
+        genres.count {
+            if (it.key == "__liked__") liked.add(videoId) else playlists.getOrPut(it.key) { mutableSetOf() }.add(videoId)
+        }
 
     override suspend fun nextDue(now: Long) = lookups.values.firstOrNull { !it.finished && it.nextAttemptAt <= now }?.videoId
 
@@ -82,6 +86,7 @@ class GenreEnrichmentTest {
             val outcome = enrichment(repo, lastfm, mb).process("v1")
             assertIs<GenreEnrichment.Outcome.Done>(outcome)
             assertEquals(setOf("alternative-rock", "grunge"), repo.playlists.keys)
+            assertEquals(setOf("v1"), repo.liked) // liked whatever the providers found
             assertTrue(repo.lookups.getValue("v1").finished)
         }
 

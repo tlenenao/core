@@ -247,7 +247,9 @@ class GenrePersistenceTest {
             val playlist = dao.getLocalPlaylist(dao.getGenrePlaylistId("alternative-rock")!!)!!
             assertEquals("Genre · Alternative Rock", playlist.title)
             assertEquals(listOf("a"), playlist.tracks)
-            assertEquals(1, dao.getAllLocalPlaylists(10, 0).size)
+            // The genre playlist and "Liked", each created once however many times the song is processed.
+            assertEquals(listOf("a"), dao.getLocalPlaylist(dao.getGenrePlaylistId("__liked__")!!)!!.tracks)
+            assertEquals(2, dao.getAllLocalPlaylists(10, 0).size)
             assertEquals(3, dao.getGenreLookup("a")!!.attempts)
         }
 }
