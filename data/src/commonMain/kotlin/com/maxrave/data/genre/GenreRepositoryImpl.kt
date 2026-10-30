@@ -55,6 +55,8 @@ internal class GenreRepositoryImpl(
             genres.count { dao.addSongToGenrePlaylist(it.key, playlistTitle(it.label), videoId) }
         }
 
+    override suspend fun removeUnlikedFrom(genreKey: String) = withContext(Dispatchers.IO) { dao.removeUnlikedFromGenrePlaylist(genreKey) }
+
     override suspend fun nextDue(now: Long) = withContext(Dispatchers.IO) { dao.nextDueGenreLookup(now) }
 
     override suspend fun earliestPending() = withContext(Dispatchers.IO) { dao.earliestPendingGenreLookup() }

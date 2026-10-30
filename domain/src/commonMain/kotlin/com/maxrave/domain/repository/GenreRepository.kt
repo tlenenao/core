@@ -37,6 +37,9 @@ interface GenreRepository {
         playlistTitle: (label: String) -> String,
     ): Int
 
+    /** Removes from the automatic playlist [genreKey] the songs that are no longer liked. */
+    suspend fun removeUnlikedFrom(genreKey: String) {}
+
     /** A song whose retry time has come, or null. Songs that are finished are never returned. */
     suspend fun nextDue(now: Long): String?
 

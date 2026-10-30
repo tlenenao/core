@@ -1085,6 +1085,18 @@ interface DatabaseDao {
         return true
     }
 
+    /** Drops from the automatic playlist of [genreKey] every song that is no longer liked. */
+    @Transaction
+    suspend fun removeUnlikedFromGenrePlaylist(genreKey: String) {
+        val playlistId = getGenrePlaylistId(genreKey) ?: return
+        val tracks = getLocalPlaylist(playlistId)?.tracks ?: return
+        val liked = getLikedSongIds().toSet()
+        val stale = tracks.filter { it !in liked }
+        if (stale.isEmpty()) return
+        stale.forEach { deletePairSongLocalPlaylist(playlistId, it) }
+        updateLocalPlaylistTracks(tracks - stale.toSet(), playlistId)
+    }
+
     // GoogleAccountEntity
     @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
     suspend fun insertGoogleAccount(googleAccountEntity: GoogleAccountEntity): Long

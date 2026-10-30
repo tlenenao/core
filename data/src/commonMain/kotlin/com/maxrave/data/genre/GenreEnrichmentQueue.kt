@@ -46,6 +46,7 @@ internal class GenreEnrichmentQueue(
     /** The Settings button: every liked song is filed again, with fresh answers from the providers. */
     override suspend fun reingestLikedSongs(): Int {
         val ids = likedSongIds()
+        enrichment.syncLiked()
         lock.withLock {
             for (id in ids) {
                 forced += id
@@ -54,6 +55,19 @@ internal class GenreEnrichmentQueue(
         }
         if (ids.isNotEmpty()) ensureDraining()
         return ids.size
+    }
+
+    /** Unliking removes the song from the "Liked" playlist, so it stays a mirror. */
+    fun onSongUnliked() {
+        scope.launch {
+            try {
+                enrichment.syncLiked()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.e(TAG, "Could not sync the Liked playlist: ${e.message}")
+            }
+        }
     }
 
     fun onSongLiked(videoId: String) {

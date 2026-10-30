@@ -76,7 +76,7 @@ class GenreEnrichment(
                     }
                 }
             lookup = lookup.withState(provider.source, state)
-            Logger.i(TAG, "$videoId ${provider.source}: ${result::class.simpleName} -> state $state")
+            Logger.i(TAG, "$videoId ${provider.source}: $result -> state $state")
         }
 
         val genres = GenreMerger.merge(repository.getTags(videoId).map { it.toNormalized() })
@@ -120,6 +120,9 @@ class GenreEnrichment(
         const val LIKED_TITLE = "Liked"
         val LIKED = MergedGenre(key = "__liked__", label = LIKED_TITLE, score = 1.0, sources = emptySet())
     }
+
+    /** Makes "Liked" mirror the liked songs: whatever was unliked since leaves the playlist. */
+    suspend fun syncLiked() = repository.removeUnlikedFrom(LIKED.key)
 
     /** Registers a newly favourited song so that it survives a restart. Never overwrites progress. */
     suspend fun register(videoId: String) {

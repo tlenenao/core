@@ -10,6 +10,7 @@ import com.maxrave.domain.data.entities.genre.GenreLookupEntity
 import com.maxrave.domain.data.entities.genre.GenreLookupEntity.ProviderState
 import com.maxrave.domain.genre.GenreEnrichment
 import com.maxrave.domain.genre.GenreSource
+import com.maxrave.domain.genre.MergedGenre
 import com.maxrave.domain.genre.GenreTagProvider
 import com.maxrave.domain.genre.NormalizedTag
 import com.maxrave.domain.genre.ProviderResult
@@ -251,5 +252,24 @@ class GenrePersistenceTest {
             assertEquals(listOf("a"), dao.getLocalPlaylist(dao.getGenrePlaylistId("__liked__")!!)!!.tracks)
             assertEquals(2, dao.getAllLocalPlaylists(10, 0).size)
             assertEquals(3, dao.getGenreLookup("a")!!.attempts)
+        }
+
+    @Test
+    fun likedPlaylistMirrorsLikedSongs() =
+        runTest {
+            val dao = memoryDb().getDatabaseDao()
+            dao.insertSong(song("a", title = "A", artist = "X"))
+            dao.insertSong(song("b", title = "B", artist = "X"))
+            dao.updateLiked(1, "a")
+            dao.updateLiked(1, "b")
+            val liked = MergedGenre("__liked__", "Liked", 1.0, emptySet())
+            val repo = GenreRepositoryImpl(dao)
+            repo.addToGenrePlaylists("a", listOf(liked)) { it }
+            repo.addToGenrePlaylists("b", listOf(liked)) { it }
+
+            dao.updateLiked(0, "a")
+            repo.removeUnlikedFrom("__liked__")
+
+            assertEquals(listOf("b"), dao.getLocalPlaylist(dao.getGenrePlaylistId("__liked__")!!)!!.tracks)
         }
 }

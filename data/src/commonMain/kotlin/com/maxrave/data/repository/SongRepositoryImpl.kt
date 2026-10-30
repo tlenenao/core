@@ -344,8 +344,10 @@ internal class SongRepositoryImpl(
     ) = withContext(Dispatchers.Main) {
         // Read before the write: only a song going from not-liked to liked starts the genre lookup,
         // so tapping the heart on something already liked costs nothing.
-        val becameLiked = likeStatus == 1 && localDataSource.getSong(videoId)?.liked == false
+        val wasLiked = localDataSource.getSong(videoId)?.liked
+        val becameLiked = likeStatus == 1 && wasLiked == false
         localDataSource.updateLiked(likeStatus, videoId)
+        if (likeStatus != 1 && wasLiked == true) genreQueue.onSongUnliked()
         // Fire and forget: the queue returns at once and never throws, so a slow or failing network
         // can not delay the like.
         if (becameLiked) genreQueue.onSongLiked(videoId)
